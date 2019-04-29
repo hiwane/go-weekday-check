@@ -18,7 +18,7 @@ type WeekDate struct {
 
 var res []WeekDate
 
-func m2m(m int) time.Month {
+func i2m(m int) time.Month {
 	month := []time.Month{
 		time.January,
 		time.January,
@@ -39,11 +39,18 @@ func m2m(m int) time.Month {
 var weekstr [][]string
 
 func Init() {
-	re := regexp.MustCompile(`([12]\d\d\d)/([01 ]?\d)/([0-3 ]?\d) ?\(([^)]+)\)`)
+	// YYYY-MM-DD ISO 8601
+	re := regexp.MustCompile(`([12]\d\d\d)-([01]\d)-([0-3]\d) ?\(([^)]+)\)`)
 	res = append(res, WeekDate{re: re})
-	re = regexp.MustCompile(`([12]\d\d\d)-([01]\d)-([0-3]\d) ?\(([^)]+)\)`)
+	// YYYY/MM/DD
+	re = regexp.MustCompile(`([12]\d\d\d)/([01 ]?\d)/([0-3 ]?\d) ?\(([^)]+)\)`)
 	res = append(res, WeekDate{re: re})
+	re = regexp.MustCompile(`\b(\d\d)/([01 ]?\d)/([0-3 ]?\d) ?\(([^)]+)\)`)
+	res = append(res, WeekDate{re: re})
+	// YYYY年MM月DD日
 	re = regexp.MustCompile(`([12]\d\d\d)年([01 ]?\d)月([0-3 ]?\d)日 ?\(([^)]+)\)`)
+	res = append(res, WeekDate{re: re})
+	re = regexp.MustCompile(`\b(\d\d)年([01 ]?\d)月([0-3 ]?\d)日 ?\(([^)]+)\)`)
 	res = append(res, WeekDate{re: re})
 
 	weekstr = [][]string{
@@ -63,6 +70,27 @@ func atoi(s string) int {
 	}
 }
 
+func guessYear(now, month int) int {
+	// mm-3 .. mm+9
+	//       *
+	// a b c 1 2 3 4 5 6 7 8 9
+	// b c 1 2 3 4 5 6 7 8 9 A
+	// c 1 2 3 4 5 6 7 8 9 A B
+	// 1 2 3 4 5 6 7 8 9 A B C
+	// 2 3 4 5 6 7 8 9 A B C 1
+	DF := 3
+	if now <= DF {
+		if month >= 12-DF+now {
+			return -1
+		}
+	} else {
+		if month <= now-DF {
+			return +1
+		}
+	}
+	return 0
+}
+
 func checkWeek(line string, match []string) (string, bool) {
 	y := atoi(match[1])
 	m := atoi(match[2])
@@ -77,9 +105,11 @@ func checkWeek(line string, match []string) (string, bool) {
 	}
 	if match[1] == "" {
 		// year 未指定. 月から推測
-		// t := time.Now()
+		t := time.Now()
+		mm := int(t.Month())
+		y = t.Year() + guessYear(m, mm)
 	} else if 0 <= y && y < 100 {
-		if y < 50 {
+		if y < 90 {
 			y += 2000
 		} else {
 			y += 1900
@@ -89,7 +119,7 @@ func checkWeek(line string, match []string) (string, bool) {
 		return line, false
 	}
 
-	t := time.Date(y, m2m(m), d, 12, 0, 0, 0, time.UTC)
+	t := time.Date(y, i2m(m), d, 12, 0, 0, 0, time.UTC)
 	for _, ws := range weekstr {
 		for _, ww := range ws {
 			if w == ww {
