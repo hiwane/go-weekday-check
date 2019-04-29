@@ -1,0 +1,12 @@
+language: go
+
+before_script:
+    - uname -a
+
+script:
+    - go test
+    - cp main_test.go /tmp/a.$$
+    - sh -c "! go run main.go /tmp/a.$$"
+    - sh -c "! go run main.go --fix /tmp/a.$$"
+    - go run main.go /tmp/a.$$
+    - go run main.go --fix /tmp/a.$$
