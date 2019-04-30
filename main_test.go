@@ -1,7 +1,9 @@
 package main
 
 import (
+	"strconv"
 	"testing"
+	"time"
 )
 
 func TestCheckLine(t *testing.T) {
@@ -81,6 +83,37 @@ func TestGuessYear(t *testing.T) {
 		y := guessYear(test[0], test[1])
 		if y != test[2] {
 			t.Fatalf("expect %d, but actual %d: [%d, %d]", test[2], y, test[0], test[1])
+		}
+	}
+}
+
+func TestGetYMD(t *testing.T) {
+	// now month expect
+	tm := time.Now()
+	tests := [][]int{
+		{2019, 4, 30, 2019},
+		{2019, 5, 1, 2019},
+		{19, 5, 1, 2019},
+		{20, 5, 1, 2020},
+		{0, 5, 1, 2000},
+		{-1, int(tm.Month()), 1, tm.Year()},
+	}
+	for _, test := range tests {
+		var ys string
+		if test[0] < 0 {
+			ys = ""
+		} else {
+			ys = strconv.Itoa(test[0])
+		}
+		y, m, d := getYMD(ys, strconv.Itoa(test[1]), strconv.Itoa(test[2]))
+		if y != test[3] {
+			t.Fatalf("y: expect %d, but actual %d: [%d, %d, %d]", test[3], y, test[0], test[1], test[2])
+		}
+		if m != test[1] {
+			t.Fatalf("m: expect %d, but actual %d: [%d, %d, %d]", test[1], m, test[0], test[1], test[2])
+		}
+		if d != test[2] {
+			t.Fatalf("d: expect %d, but actual %d: [%d, %d, %d]", test[2], d, test[0], test[1], test[2])
 		}
 	}
 }

@@ -39,7 +39,7 @@ func i2m(m int) time.Month {
 var weekstr [][]string
 
 func Init() {
-	// YYYY-MM-DD ISO 8601
+	// YYYY-MM-DD [ISO 8601]
 	re := regexp.MustCompile(`([12]\d\d\d)-([01]\d)-([0-3]\d) ?\(([^)]+)\)`)
 	res = append(res, WeekDate{re: re})
 	// YYYY/MM/DD
@@ -47,10 +47,18 @@ func Init() {
 	res = append(res, WeekDate{re: re})
 	re = regexp.MustCompile(`\b(\d\d)/([01 ]?\d)/([0-3 ]?\d) ?\(([^)]+)\)`)
 	res = append(res, WeekDate{re: re})
+	re = regexp.MustCompile(`^()([01 ]?\d)/([0-3 ]?\d) ?\(([^)]+)\)`) // MM/DD
+	res = append(res, WeekDate{re: re})
+	re = regexp.MustCompile(`[^0-9/]()([01 ]?\d)/([0-3 ]?\d) ?\(([^)]+)\)`) // MM/DD
+	res = append(res, WeekDate{re: re})
 	// YYYY年MM月DD日
 	re = regexp.MustCompile(`([12]\d\d\d)年([01 ]?\d)月([0-3 ]?\d)日 ?\(([^)]+)\)`)
 	res = append(res, WeekDate{re: re})
 	re = regexp.MustCompile(`\b(\d\d)年([01 ]?\d)月([0-3 ]?\d)日 ?\(([^)]+)\)`)
+	res = append(res, WeekDate{re: re})
+	re = regexp.MustCompile(`^()([01 ]?\d)月([0-3 ]?\d)日 ?\(([^)]+)\)`) // MM月DD日
+	res = append(res, WeekDate{re: re})
+	re = regexp.MustCompile(`[^年]()([01 ]?\d)月([0-3 ]?\d)日 ?\(([^)]+)\)`) // MM月DD日
 	res = append(res, WeekDate{re: re})
 
 	weekstr = [][]string{
@@ -62,12 +70,13 @@ func Init() {
 }
 
 func atoi(s string) int {
-	for i := 0; ; i++ {
+	for i := 0; i < len(s); i++ {
 		if s[i] != ' ' {
 			a, _ := strconv.Atoi(s[i:])
 			return a
 		}
 	}
+	return 0
 }
 
 func guessYear(now, month int) int {
@@ -91,34 +100,39 @@ func guessYear(now, month int) int {
 	return 0
 }
 
-func checkWeek(line string, match []string) (string, bool) {
-	y := atoi(match[1])
-	m := atoi(match[2])
-	d := atoi(match[3])
-	w := match[4]
-	// fmt.Printf("org: %d/%d/%d %s\n", y, m, d, w)
-	if m < 0 || m > 12 {
-		return line, false
-	}
-	if d < 0 || d > 31 {
-		return line, false
-	}
-	if match[1] == "" {
+func getYMD(ys, ms, ds string) (int, int, int) {
+	y := atoi(ys)
+	m := atoi(ms)
+	d := atoi(ds)
+	if ys == "" {
 		// year 未指定. 月から推測
 		t := time.Now()
 		mm := int(t.Month())
 		y = t.Year() + guessYear(m, mm)
 	} else if 0 <= y && y < 100 {
+		// 2 桁指定
 		if y < 90 {
 			y += 2000
 		} else {
 			y += 1900
 		}
 	}
+	return y, m, d
+}
+
+func checkWeek(line string, match []string) (string, bool) {
+	y, m, d := getYMD(match[1], match[2], match[3])
+	// fmt.Printf("org: %d/%d/%d %s\n", y, m, d, w)
+
+	if m < 0 || m > 12 || d < 0 || d > 31 {
+		// y 指定されている場合には何かの間違いでしょう...
+		return line, len(match[1]) == 4 && 1990 < y && y < 2200
+	}
 	if y < 1900 || y > 2100 {
 		return line, false
 	}
 
+	w := match[4]
 	t := time.Date(y, i2m(m), d, 12, 0, 0, 0, time.UTC)
 	for _, ws := range weekstr {
 		for _, ww := range ws {
@@ -148,17 +162,23 @@ func doCheckLine(line string) (string, bool) {
 }
 
 func doCheck(fname string, fix bool) (int, error) {
-	f, err := os.Open(fname)
-	if err != nil {
-		return 0, err
+	var f *os.File
+	if fname == "" {
+		f = os.Stdin
+	} else {
+		f, err := os.Open(fname)
+		if err != nil {
+			return 0, err
+		}
+		defer f.Close()
 	}
-	defer f.Close()
 
 	reader := bufio.NewReaderSize(f, 4096)
 	lines := make([]string, 0)
 	b := false
 	for i := 1; ; i++ {
 		line, _, err := reader.ReadLine()
+		// fmt.Printf("in %s\n", string(line))
 		if err == io.EOF {
 			break
 		} else if err != nil {
@@ -176,11 +196,15 @@ func doCheck(fname string, fix bool) (int, error) {
 	if fix && b {
 		// 書き込み
 		f = nil
-		f, err := os.Create(fname)
-		if err != nil {
-			return 0, err
+		if fname == "" {
+			f = os.Stdout
+		} else {
+			f, err := os.Create(fname)
+			if err != nil {
+				return 0, err
+			}
+			defer f.Close()
 		}
-		defer f.Close()
 
 		for i := 0; i < len(lines); i++ {
 			f.WriteString(lines[i] + "\n")
@@ -211,8 +235,12 @@ func run() int {
 
 	args := flag.Args()
 	if len(args) == 0 {
-		flag.Usage()
-		return 2
+		r, err := doCheck("", *fix)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			return 3
+		}
+		return r
 	}
 
 	ret := 0
