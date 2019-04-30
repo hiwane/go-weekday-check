@@ -161,15 +161,38 @@ func doCheckLine(line string) (string, bool) {
 	return line, b
 }
 
-func doCheck(fname string, fix bool) (int, error) {
-	var f *os.File
+func openr(fname string) (*os.File, error) {
+	// open file for reading
 	if fname == "" {
-		f = os.Stdin
+		return os.Stdin, nil
 	} else {
 		f, err := os.Open(fname)
 		if err != nil {
-			return 0, err
+			return nil, err
 		}
+		return f, nil
+	}
+}
+
+func openw(fname string) (*os.File, error) {
+	// open file for writing
+	if fname == "" {
+		return os.Stdout, nil
+	} else {
+		f, err := os.Create(fname)
+		if err != nil {
+			return nil, err
+		}
+		return f, nil
+	}
+}
+
+func doCheck(fname string, fix bool) (int, error) {
+	f, err := openr(fname)
+	if err != nil {
+		return 0, err
+	}
+	if fname != "" {
 		defer f.Close()
 	}
 
@@ -195,17 +218,13 @@ func doCheck(fname string, fix bool) (int, error) {
 
 	if fix && b {
 		// 書き込み
-		f = nil
-		if fname == "" {
-			f = os.Stdout
-		} else {
-			f, err := os.Create(fname)
-			if err != nil {
-				return 0, err
-			}
+		f, err = openw(fname)
+		if err != nil {
+			return 0, err
+		}
+		if fname != "" {
 			defer f.Close()
 		}
-
 		for i := 0; i < len(lines); i++ {
 			f.WriteString(lines[i] + "\n")
 		}
